@@ -47,23 +47,20 @@ func tokenHandler(w http.ResponseWriter, r *http.Request) {
 	jsonResponse, err := json.Marshal(data)
 
 	if err != nil {
-		// If marshaling fails, respond with an internal server error
 		slog.Error("Failed to marshal JSON", "msg", err)
 		http.Error(w, "Something went wrong!", http.StatusInternalServerError)
 		return
 	}
 
-	// Set the response header to indicate JSON content
 	w.Header().Set("Content-Type", "application/json")
 
-	// Write the JSON response
 	w.Write(jsonResponse)
 
 }
 
 func main() {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/tokens", tokenHandler)
+	mux.HandleFunc("/", tokenHandler)
 	s := http.Server{
 		Addr:         ":3333",
 		ReadTimeout:  30 * time.Second,
