@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"net/http"
 	"strings"
+	"time"
 )
 
 var globalTokenPool []string
@@ -35,7 +36,6 @@ func generateTokenPool(poolSize int) error {
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	tokenList := strings.Join(globalTokenPool, "<br>")
-	// Write a simple HTML response
 	fmt.Fprintln(w, `
         <html>
             <head><title>Tolkien</title></head>
@@ -55,9 +55,19 @@ func main() {
 		log.Fatal(err)
 	}
 	fmt.Println("Token pool sucessfully generated!")
-	http.HandleFunc("/", handler)
-	serverErr := http.ListenAndServe(":3333", nil)
-	if serverErr != nil {
-		log.Fatal(serverErr)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", handler)
+	s := http.Server{
+		Addr:         ":3333",
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 90 * time.Second,
+		IdleTimeout:  120 * time.Second,
+		Handler:      mux,
+	}
+	srverr := s.ListenAndServe()
+	if srverr != nil {
+		if err != http.ErrServerClosed {
+			panic(err)
+		}
 	}
 }
