@@ -2,11 +2,19 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"math/rand"
 	"net/http"
 	"time"
+
+	"github.com/Pradhvan/tolkien/dbManager"
+	"github.com/go-redis/redis"
 )
+
+type RedisInstance struct {
+	RInstance *redis.Client
+}
 
 func generateToken() (string, error) {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -29,7 +37,7 @@ func generateTokenPool(poolSize int) ([]string, error) {
 	return tokenPool, nil
 }
 
-func tokenHandler(w http.ResponseWriter, r *http.Request) {
+func (c *RedisInstance) tokenHandler(w http.ResponseWriter, r *http.Request) {
 	tokens, err := generateTokenPool(10)
 
 	if err != nil {
@@ -59,8 +67,11 @@ func tokenHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	//Initialize Redis Client
+	client := dbManager.InitRedisClient()
+	redisHandler := &RedisInstance{RInstance: &client}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", tokenHandler)
+	mux.HandleFunc("/", redisHandler.tokenHandler)
 	s := http.Server{
 		Addr:         ":3333",
 		ReadTimeout:  30 * time.Second,
@@ -68,6 +79,7 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 		Handler:      mux,
 	}
+	fmt.Println("Listening on port :3333 . . .")
 	err := s.ListenAndServe()
 	if err != nil {
 		if err != http.ErrServerClosed {
