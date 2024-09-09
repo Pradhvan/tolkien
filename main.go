@@ -10,6 +10,8 @@ import (
 
 	"github.com/Pradhvan/tolkien/dbManager"
 	"github.com/go-redis/redis"
+
+	"github.com/spf13/viper"
 )
 
 type RedisInstance struct {
@@ -17,8 +19,8 @@ type RedisInstance struct {
 }
 
 func generateToken() (string, error) {
-	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	result := make([]byte, 11)
+	charset := viper.GetString("TOKEN.CHARSET")
+	result := make([]byte, viper.GetInt("TOKEN.LENGTH"))
 	for i := range result {
 		result[i] = charset[rand.Intn(len(charset))]
 	}
@@ -67,19 +69,29 @@ func (c *RedisInstance) tokenHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	//Initialize Viper
+	viper.SetConfigName("config")
+	viper.AddConfigPath(".")
+	viper.AutomaticEnv()
+	viper.SetConfigType("yml")
+	if err := viper.ReadInConfig(); err != nil {
+		fmt.Printf("Error reading config file, %s", err)
+	}
 	//Initialize Redis Client
 	client := dbManager.InitRedisClient()
 	redisHandler := &RedisInstance{RInstance: &client}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", redisHandler.tokenHandler)
+	port := viper.GetString("APP.PORT")
+	address := ":" + port
 	s := http.Server{
-		Addr:         ":3333",
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 90 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		Addr:         address,
+		ReadTimeout:  viper.GetDuration("APP.READ_TIMEOUT") * time.Second,
+		WriteTimeout: viper.GetDuration("APP.WRITE_TIMEOUT") * time.Second,
+		IdleTimeout:  viper.GetDuration("APP.IDLE_TIMEOUT") * time.Second,
 		Handler:      mux,
 	}
-	fmt.Println("Listening on port :3333 . . .")
+	fmt.Printf("Listening on port : %s", viper.GetString("APP.PORT"))
 	err := s.ListenAndServe()
 	if err != nil {
 		if err != http.ErrServerClosed {
