@@ -40,7 +40,7 @@ func generateTokenPool(poolSize int) ([]string, error) {
 }
 
 func (c *RedisInstance) tokenHandler(w http.ResponseWriter, r *http.Request) {
-	tokens, err := generateTokenPool(10)
+	tokens, err := generateTokenPool(viper.GetInt("TOKEN.POOL_SIZE"))
 
 	if err != nil {
 		slog.Error("Failed to generate token", "msg", err)
