@@ -15,4 +15,5 @@
 # vendor/
 
 # Config file
-config.yaml
+config_testing.yaml
+config_production.yaml
