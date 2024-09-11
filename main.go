@@ -73,7 +73,21 @@ func main() {
 	viper.SetConfigName("config")
 	viper.AddConfigPath(".")
 	viper.AutomaticEnv()
-	viper.SetConfigType("yml")
+	viper.SetConfigType("yml")	
+
+	//Set Default Values
+	viper.SetDefault("APP.PORT", "3333")
+	viper.SetDefault("APP.READ_TIMEOUT", 30)
+	viper.SetDefault("APP.WRITE_TIMEOUT", 90)
+	viper.SetDefault("APP.IDLE_TIMEOUT", 120)
+	viper.SetDefault("TOKEN.LENGTH", 11)
+	viper.SetDefault("TOKEN.CHARSET", "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+	viper.SetDefault("TOKEN.POOL_SIZE", 10)
+	viper.SetDefault("REDIS.HOST", "localhost")
+	viper.SetDefault("REDIS.PORT", "6379")
+	viper.SetDefault("REDIS.PASSWORD", "")
+	viper.SetDefault("REDIS.DB", 0)
+
 	if err := viper.ReadInConfig(); err != nil {
 		fmt.Printf("Error reading config file, %s", err)
 	}
