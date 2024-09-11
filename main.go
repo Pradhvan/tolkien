@@ -69,11 +69,18 @@ func (c *RedisInstance) tokenHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	runEnv := "testing"
+
 	//Initialize Viper
-	viper.SetConfigName("config")
+	viper.SetConfigType("yml")
+	switch runEnv {
+	case "testing":
+		viper.SetConfigName("config_testing")
+	case "production":
+		viper.SetConfigName("config_production")
+	}
 	viper.AddConfigPath(".")
 	viper.AutomaticEnv()
-	viper.SetConfigType("yml")	
 
 	//Set Default Values
 	viper.SetDefault("APP.PORT", "3333")
