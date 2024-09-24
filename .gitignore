@@ -13,3 +13,7 @@
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
+
+# Config file
+config_testing.yaml
+config_production.yaml

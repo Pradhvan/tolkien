@@ -1,0 +1,16 @@
+REDIS:
+  HOST: "production-redis-server"
+  PORT: "6380"
+  PASSWORD: "securepassword"
+  DB: 1
+
+TOKEN:
+  CHARSET: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+  LENGTH: 12
+  POOL_SIZE: 100
+
+APP:
+  PORT: 8080
+  READ_TIMEOUT: 60
+  WRITE_TIMEOUT: 120
+  IDLE_TIMEOUT: 180
