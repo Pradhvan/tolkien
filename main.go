@@ -16,12 +16,15 @@ import (
 
 type RedisInstance struct {
 	RInstance *redis.Client
+	DeletedRInstance *redis.Client
 }
 
 const errMsg = "Something went wrong"
 const jsonMarshalErrMsg = "Failed to marshal JSON"
 const contentTypeHeader = "Content-Type"
 const applicationJSON = "application/json"
+const serviceIDRequiredErrMsg = "serviceID is required"
+const tokenPoolSizeKey = "TOKEN.POOL_SIZE"
 
 func generateToken() (string, error) {
 	charset := viper.GetString("TOKEN.CHARSET")
@@ -33,15 +36,33 @@ func generateToken() (string, error) {
 }
 
 func generateTokenPool(poolSize int) ([]string, error) {
-	tokenPool := make([]string, poolSize)
-	for i := range tokenPool {
+	tokenPool := make([]string, 0, poolSize)
+	
+	deletedTokenClient := dbManager.InitDeletedTokenRedisClient()
+
+	deletedTokens := deletedTokenClient.Keys("*").Val()
+
+	for len(tokenPool) < poolSize {
 		token, err := generateToken()
 		if err != nil {
 			return nil, err
 		}
-		tokenPool[i] = token
+
+		if !contains(deletedTokens, token) {
+			tokenPool = append(tokenPool, token)
+		}
 	}
+
 	return tokenPool, nil
+}
+
+func contains(tokens []string, token string) bool {
+	for _, t := range tokens {
+		if t == token {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *RedisInstance) tokenHandler(w http.ResponseWriter, r *http.Request) {
@@ -56,7 +77,7 @@ func (c *RedisInstance) tokenHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(validTokens) == 0 {
-		tokens, err := generateTokenPool(viper.GetInt("TOKEN.POOL_SIZE"))
+		tokens, err := generateTokenPool(viper.GetInt(tokenPoolSizeKey))
 		if err != nil {
 			slog.Error("Failed to generate token", "msg", err)
 			http.Error(w, errMsg, http.StatusInternalServerError)
@@ -105,7 +126,7 @@ func (c *RedisInstance) storeTokenPool(tokenPool []string) error {
 func (c *RedisInstance) assignToken(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.URL.Query().Get("serviceID")
 	if serviceID == "" {
-		http.Error(w, "serviceID is required", http.StatusBadRequest)
+		http.Error(w, serviceIDRequiredErrMsg, http.StatusBadRequest)
 		return
 	}
 
@@ -183,7 +204,7 @@ func (c *RedisInstance) keepAliveToken(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.URL.Query().Get("serviceID")
 
 	if serviceID == "" {
-		http.Error(w, "serviceID is required", http.StatusBadRequest)
+		http.Error(w, serviceIDRequiredErrMsg, http.StatusBadRequest)
 		return
 	}
 
@@ -225,7 +246,82 @@ func (c *RedisInstance) keepAliveToken(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(contentTypeHeader, applicationJSON)
 	w.Write(jsonResponse)
 }
-	
+
+func (c *RedisInstance) deleteToken(w http.ResponseWriter, r *http.Request) {
+	serviceID := r.URL.Query().Get("serviceID")
+	if serviceID == "" {
+		http.Error(w, serviceIDRequiredErrMsg, http.StatusBadRequest)
+		return
+	}
+
+
+	tokenPool := c.RInstance.Keys("*").Val()
+	var tokenToDelete string
+	for _, token := range tokenPool {
+		currentServiceID, err := c.RInstance.HGet(token, "serviceID").Result()
+		if err == nil && currentServiceID == serviceID {
+			tokenToDelete = token
+			break
+		}
+	}
+
+	if tokenToDelete == "" {
+		http.Error(w, "Token not found", http.StatusNotFound)
+		return
+	}
+
+	err := c.DeletedRInstance.HMSet(tokenToDelete, map[string]interface{}{
+		"serviceID": serviceID,
+		"deleted_at": time.Now().Format(time.RFC3339),
+	}).Err()
+
+	if err != nil {
+		slog.Error("Failed to delete token", "msg", err)
+		http.Error(w, errMsg, http.StatusInternalServerError)
+		return
+	}
+
+	err = c.RInstance.Del(tokenToDelete).Err()
+	if err != nil {
+		slog.Error("Failed to delete token", "msg", err)
+		http.Error(w, errMsg, http.StatusInternalServerError)
+		return
+	}
+
+	remainingTokens := c.RInstance.Keys("*").Val()
+	if len(remainingTokens) < viper.GetInt(tokenPoolSizeKey) {
+		newTokens, err := generateTokenPool(viper.GetInt(tokenPoolSizeKey) - len(remainingTokens))
+		if err != nil {
+			slog.Error("Failed to generate token", "msg", err)
+			http.Error(w, errMsg, http.StatusInternalServerError)
+			return
+		}
+		
+		err = c.storeTokenPool(newTokens)
+		if err != nil {
+			slog.Error("Failed to store token", "msg", err)
+			http.Error(w, errMsg, http.StatusInternalServerError)
+			return
+		}
+	}
+
+
+	data := struct {
+		Message string `json:"message"`
+	}{
+		Message: "Token deleted successfully",
+	}
+
+	jsonResponse, err := json.Marshal(data)
+	if err != nil {
+		slog.Error(jsonMarshalErrMsg, "msg", err)
+		http.Error(w, errMsg, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set(contentTypeHeader, applicationJSON)
+	w.Write(jsonResponse)
+}
 
 func main() {
 	runEnv := "testing"
@@ -241,14 +337,15 @@ func main() {
 	viper.AddConfigPath(".")
 	viper.AutomaticEnv()
 
+	const appPortKey = "APP.PORT"
 	//Set Default Values
-	viper.SetDefault("APP.PORT", "3333")
+	viper.SetDefault(appPortKey, "3333")
 	viper.SetDefault("APP.READ_TIMEOUT", 30)
 	viper.SetDefault("APP.WRITE_TIMEOUT", 90)
 	viper.SetDefault("APP.IDLE_TIMEOUT", 120)
 	viper.SetDefault("TOKEN.LENGTH", 11)
 	viper.SetDefault("TOKEN.CHARSET", "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-	viper.SetDefault("TOKEN.POOL_SIZE", 10)
+	viper.SetDefault(tokenPoolSizeKey, 10)
 	viper.SetDefault("REDIS.HOST", "localhost")
 	viper.SetDefault("REDIS.PORT", "6379")
 	viper.SetDefault("REDIS.PASSWORD", "")
@@ -259,13 +356,28 @@ func main() {
 	}
 	//Initialize Redis Client
 	client := dbManager.InitRedisClient()
-	redisHandler := &RedisInstance{RInstance: &client}
+	if client == nil {
+		panic("Cannot Initialize Redis Client")
+	}
+
+	// Initialize Deleted Token Redis Client
+	deletedTokenClient := dbManager.InitDeletedTokenRedisClient()
+	if deletedTokenClient == nil {
+		panic("Cannot Initialize Deleted Tokens Redis Client")
+	}
+
+	redisHandler := RedisInstance{
+		RInstance: client,
+		DeletedRInstance: deletedTokenClient,
+	}
+
 	mux := http.NewServeMux()
 	go redisHandler.monitorTickers()
 	mux.HandleFunc("/", redisHandler.tokenHandler)
 	mux.HandleFunc("/assign", redisHandler.assignToken)
 	mux.HandleFunc("/keep-alive", redisHandler.keepAliveToken)
-	port := viper.GetString("APP.PORT")
+	mux.HandleFunc("/delete", redisHandler.deleteToken)
+	port := viper.GetString(appPortKey)
 	address := ":" + port
 	s := http.Server{
 		Addr:         address,
@@ -274,7 +386,7 @@ func main() {
 		IdleTimeout:  viper.GetDuration("APP.IDLE_TIMEOUT") * time.Second,
 		Handler:      mux,
 	}
-	fmt.Printf("Listening on port : %s", viper.GetString("APP.PORT"))
+	fmt.Printf("Listening on port : %s", viper.GetString(appPortKey))
 	err := s.ListenAndServe()
 	if err != nil {
 		if err != http.ErrServerClosed {
