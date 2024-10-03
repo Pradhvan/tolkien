@@ -271,7 +271,7 @@ func (c *RedisInstance) deleteToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err := c.DeletedRInstance.HMSet(tokenToDelete, map[string]interface{}{
-		"serviceID": serviceID,
+		"token": tokenToDelete,
 		"deleted_at": time.Now().Format(time.RFC3339),
 	}).Err()
 
