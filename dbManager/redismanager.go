@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-func InitRedisClient() redis.Client {
+func InitRedisClient() *redis.Client {
 	client := redis.NewClient(&redis.Options{
 		Addr:     viper.GetString("REDIS.HOST") + ":" + viper.GetString("REDIS.PORT"),
 		Password: viper.GetString("REDIS.PASSWORD"),
@@ -21,5 +21,21 @@ func InitRedisClient() redis.Client {
 	}
 	fmt.Println("Redis Client Successfully Initialized . . .", pong)
 
-	return *client
+	return client
+}
+
+func InitDeletedTokenRedisClient() *redis.Client {
+	client := redis.NewClient(&redis.Options{
+		Addr:     viper.GetString("REDIS.HOST") + ":" + viper.GetString("REDIS.PORT"),
+		Password: viper.GetString("REDIS.PASSWORD"),
+		DB: viper.GetInt("REDIS.DELETED_TOKEN_DB"),
+	})
+
+	pong, err := client.Ping().Result()
+	if err != nil {
+		fmt.Println("Cannot Initialize Redis Client ", err)
+	}
+	fmt.Println("Redis Client Successfully Initialized . . .", pong)
+
+	return client
 }

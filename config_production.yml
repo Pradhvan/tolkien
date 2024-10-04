@@ -2,7 +2,8 @@ REDIS:
   HOST: "production-redis-server"
   PORT: "6380"
   PASSWORD: "securepassword"
-  DB: 1
+  DB: 2
+  DELETED_TOKEN_DB: 3
 
 TOKEN:
   CHARSET: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
